@@ -14,6 +14,7 @@ import com.drew.metadata.Metadata;
 import com.drew.metadata.exif.ExifIFD0Directory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -32,7 +33,8 @@ import java.util.regex.Pattern;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class AmazonS3Manager {
+@Profile("!local")
+public class AmazonS3Manager implements ImageStorageService {
 
     private final AmazonS3 amazonS3;
     private final S3Config s3Config;

@@ -12,7 +12,7 @@ import com.coredisc.domain.post.*;
 import com.coredisc.domain.postAnswer.PostAnswerRepository;
 import com.coredisc.domain.postAnswerImage.PostAnswerImageRepository;
 import com.coredisc.domain.todayQuestion.TodayQuestionRepository;
-import com.coredisc.infrastructure.aws.s3.AmazonS3Manager;
+import com.coredisc.infrastructure.aws.s3.ImageStorageService;
 import com.coredisc.infrastructure.aws.s3.ImageUploadResult;
 import com.coredisc.presentation.dto.post.PostRequestDTO;
 import com.coredisc.presentation.dto.post.PostResponseDTO;
@@ -36,7 +36,7 @@ public class PostCommandServiceImpl implements PostCommandService {
     private final PostAnswerRepository postAnswerRepository;
     private final PostAnswerImageRepository postAnswerImageRepository;
     private final TodayQuestionRepository todayQuestionRepository;
-    private final AmazonS3Manager amazonS3Manager;
+    private final ImageStorageService amazonS3Manager;
 
     //  빈 게시글 생성
     @Override

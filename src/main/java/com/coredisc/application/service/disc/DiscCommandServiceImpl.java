@@ -7,7 +7,7 @@ import com.coredisc.domain.common.enums.DiscCoverColor;
 import com.coredisc.domain.disc.Disc;
 import com.coredisc.domain.disc.DiscRepository;
 import com.coredisc.domain.member.Member;
-import com.coredisc.infrastructure.aws.s3.AmazonS3Manager;
+import com.coredisc.infrastructure.aws.s3.ImageStorageService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,7 +21,7 @@ import java.io.IOException;
 public class DiscCommandServiceImpl implements DiscCommandService {
 
     private final DiscRepository discRepository;
-    private final AmazonS3Manager amazonS3Manager;
+    private final ImageStorageService amazonS3Manager;
 
     @Override
     public Disc updateDiscCoverImage(Long discId, MultipartFile coverImageFile, Member member) {

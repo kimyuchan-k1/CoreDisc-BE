@@ -11,7 +11,7 @@ import com.coredisc.domain.member.Member;
 import com.coredisc.domain.member.MemberRepository;
 import com.coredisc.domain.profileImg.ProfileImg;
 import com.coredisc.domain.profileImg.ProfileImgRepository;
-import com.coredisc.infrastructure.aws.s3.AmazonS3Manager;
+import com.coredisc.infrastructure.aws.s3.ImageStorageService;
 import com.coredisc.presentation.dto.member.MemberRequestDTO;
 import com.coredisc.presentation.dto.profileImg.ProfileImgResponseDTO;
 import com.coredisc.security.jwt.JwtProvider;
@@ -35,7 +35,7 @@ public class MemberCommandServiceImpl implements MemberCommandService {
     private final RedisUtil redisUtil;
     private final JwtProvider jwtProvider;
     private final DeviceCommandService deviceCommandService;
-    private final AmazonS3Manager amazonS3Manager;
+    private final ImageStorageService amazonS3Manager;
 
     @Override
     public void resetPassword(MemberRequestDTO.ResetPasswordDTO request) {
