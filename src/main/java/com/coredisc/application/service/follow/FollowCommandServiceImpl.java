@@ -19,6 +19,8 @@ import com.coredisc.presentation.dto.notification.NotificationRequestDTO;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -39,6 +41,7 @@ public class FollowCommandServiceImpl implements FollowCommandService {
     private final FcmService fcmService;
 
     @Override
+    @CacheEvict(value = "followingIds", key = "#member.id")
     public Follow follow(Member member, Long targetId) {
 
         if (member.getId().equals(targetId)) {
@@ -96,6 +99,11 @@ public class FollowCommandServiceImpl implements FollowCommandService {
     }
 
     @Override
+    @Caching(evict = {
+            @CacheEvict(value = "followingIds", key = "#member.id"),
+            @CacheEvict(value = "circleIds", key = "#member.id"),
+            @CacheEvict(value = "circleIds", key = "#targetId")
+    })
     public void unfollow(Member member, Long targetId) {
 
         if (member.getId().equals(targetId)) {
@@ -126,6 +134,7 @@ public class FollowCommandServiceImpl implements FollowCommandService {
     }
 
     @Override
+    @CacheEvict(value = "circleIds", key = "#targetId")
     // 차단 시, Follow 관계가 삭제되기에 친친 설정 로직에서 차단 여부는 체크하지 않음
     public void updateCircleStatus(Member member, Long targetId, boolean isCircle) {
 

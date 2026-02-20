@@ -20,6 +20,11 @@ public class PostLikeRepositoryAdaptor implements PostLikeRepository {
     }
 
     @Override
+    public boolean existsByMemberIdAndPostId(Long memberId, Long postId) {
+        return jpaPostLikeRepository.existsByMemberIdAndPostId(memberId, postId);
+    }
+
+    @Override
     public PostLike createPostLike(PostLike postLike) {
         return jpaPostLikeRepository.save(postLike);
     }

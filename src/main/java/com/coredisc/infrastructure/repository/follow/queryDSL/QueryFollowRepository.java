@@ -15,4 +15,7 @@ public interface QueryFollowRepository {
     int countCircleFollowers(Member member);
     int countFollowers(Member member);
     int countFollowings(Member member);
+
+    List<Long> findFollowingIds(Long memberId);
+    List<Long> findCircleFollowingIds(Long memberId);
 }

@@ -137,55 +137,47 @@ public class QueryPostRepositoryImpl implements QueryPostRepository {
     }
 
     @Override
-    public List<PostResponseDTO.PostFeedResponseDTO.PostSummary> findPostFeed(Long memberId, FeedType feedType, Long lastPostId, Integer size) {
+    public List<PostResponseDTO.PostFeedResponseDTO.PostSummary> findPostFeed(Long memberId, FeedType feedType, Long lastPostId, Integer size, List<Long> followingIds, List<Long> circleIds) {
 
         BooleanBuilder condition = new BooleanBuilder();
 
         // 기본 조건: 발행된 게시글만
         condition.and(post.status.eq(PostStatus.PUBLISHED));
 
-        // 피드 타입별 필터링
+        // 피드 타입별 필터링 (캐시된 ID 리스트 사용 — 서브쿼리 제거)
         BooleanBuilder memberCondition = new BooleanBuilder();
 
         if (feedType == FeedType.ALL) {
             // 팔로우하는 모든 사용자의 게시글 + 내 게시글
-            memberCondition.or(post.member.id.eq(memberId)); // 내 게시글 포함
-            memberCondition.or(post.member.id.in(
-                    jpaQueryFactory
-                            .select(follow.following.id)
-                            .from(follow)
-                            .where(follow.follower.id.eq(memberId))
-            ));
+            memberCondition.or(post.member.id.eq(memberId));
+            if (!followingIds.isEmpty()) {
+                memberCondition.or(post.member.id.in(followingIds));
+            }
         } else if (feedType == FeedType.CORE) {
-            // 친한친구로 설정한 사용자들의 게시글만 (내 게시글 제외)
-            memberCondition.and(post.member.id.in(
-                    jpaQueryFactory
-                            .select(follow.following.id)
-                            .from(follow)
-                            .where(follow.follower.id.eq(memberId)
-                                    .and(follow.isCircle.eq(true)))
-            ));
+            // 친한친구로 설정한 사용자들의 게시글만
+            if (!circleIds.isEmpty()) {
+                memberCondition.and(post.member.id.in(circleIds));
+            } else {
+                // 서클 팔로잉이 없으면 결과 없음
+                memberCondition.and(post.member.id.eq(-1L));
+            }
         }
 
         condition.and(memberCondition);
 
-        // 공개 범위 필터링
+        // 공개 범위 필터링 (캐시된 ID 리스트 사용 — 서브쿼리 제거)
         BooleanBuilder visibilityCondition = new BooleanBuilder();
 
         // PUBLIC 게시글은 누구나 볼 수 있음
         visibilityCondition.or(post.publicity.eq(PublicityType.OFFICIAL));
 
         // CIRCLE 게시글은 서로 친한친구인 경우만 보이도록
-        visibilityCondition.or(
-                post.publicity.eq(PublicityType.CIRCLE)
-                        .and(post.member.id.in(
-                                jpaQueryFactory
-                                        .select(follow.following.id)
-                                        .from(follow)
-                                        .where(follow.follower.id.eq(memberId)
-                                                .and(follow.isCircle.eq(true)))
-                        ))
-        );
+        if (!circleIds.isEmpty()) {
+            visibilityCondition.or(
+                    post.publicity.eq(PublicityType.CIRCLE)
+                            .and(post.member.id.in(circleIds))
+            );
+        }
 
         // ALL 피드에서만 내 게시글의 모든 공개범위 허용
         if (feedType == FeedType.ALL) {
@@ -241,6 +233,39 @@ public class QueryPostRepositoryImpl implements QueryPostRepository {
                         )
                 ));
 
+        // TodayQuestion 배치 조회 (N+1 방지)
+        // 모든 게시글의 멤버 ID와 날짜 범위를 수집하여 한 번에 조회
+        Set<Long> memberIds = posts.stream()
+                .limit(size)
+                .map(p -> p.getMember().getId())
+                .collect(Collectors.toSet());
+
+        LocalDate minDate = postDateMap.values().stream().min(LocalDate::compareTo).orElse(LocalDate.now());
+        LocalDate maxDate = postDateMap.values().stream().max(LocalDate::compareTo).orElse(LocalDate.now());
+        LocalDate startOfMinMonth = minDate.withDayOfMonth(1);
+        LocalDate endOfMaxMonth = maxDate.withDayOfMonth(maxDate.lengthOfMonth());
+
+        List<TodayQuestion> allQuestions = todayQuestionRepository.findByMemberIdInAndQuestionOrderInAndSelectedDateBetween(
+                new ArrayList<>(memberIds), List.of(1, 2, 3, 4), startOfMinMonth, endOfMaxMonth);
+
+        // (memberId, questionOrder, yearMonth) -> TodayQuestion 룩업 맵 구성
+        Map<String, TodayQuestion> questionLookup = new HashMap<>();
+        for (TodayQuestion tq : allQuestions) {
+            Long mId = tq.getMember().getId();
+            int order = tq.getQuestionOrder();
+            LocalDate selDate = tq.getSelectedDate();
+
+            if (order <= 3) {
+                // 월별 질문: key = memberId:order:yearMonth
+                String key = mId + ":" + order + ":" + selDate.getYear() + "-" + selDate.getMonthValue();
+                questionLookup.putIfAbsent(key, tq);
+            } else {
+                // 일별 질문: key = memberId:order:date
+                String key = mId + ":" + order + ":" + selDate;
+                questionLookup.putIfAbsent(key, tq);
+            }
+        }
+
         // PostSummary DTO로 변환
         return posts.stream()
                 .limit(size) // hasNext 체크 후 실제 반환할 크기로 제한
@@ -250,29 +275,23 @@ public class QueryPostRepositoryImpl implements QueryPostRepository {
                     // 첫 번째 답변 가져오기 (answerOrder가 가장 작은 값)
                     PostAnswer firstAnswer = postAnswers.isEmpty() ? null : postAnswers.get(0);
 
-                    // 첫 번째 답변에 매칭되는 질문 찾기
+                    // 첫 번째 답변에 매칭되는 질문 찾기 (룩업 맵에서 조회)
                     String firstQuestion = null;
                     if (firstAnswer != null) {
                         LocalDate postDate = postDateMap.get(postEntity.getId());
                         int answerOrder = firstAnswer.getAnswerOrder();
+                        Long mId = postEntity.getMember().getId();
 
-                        Optional<TodayQuestion> targetQuestion = Optional.empty();
-
+                        String lookupKey;
                         if (answerOrder <= 3) {
-                            // 한달질문 (1,2,3): 해당 월에서 questionOrder=answerOrder인 질문 찾기
-                            LocalDate startOfMonth = postDate.withDayOfMonth(1);
-                            LocalDate endOfMonth = postDate.withDayOfMonth(postDate.lengthOfMonth());
-
-                            targetQuestion = todayQuestionRepository.findByMemberAndQuestionOrderAndSelectedDateBetween(
-                                    postEntity.getMember(), answerOrder, startOfMonth, endOfMonth);
+                            lookupKey = mId + ":" + answerOrder + ":" + postDate.getYear() + "-" + postDate.getMonthValue();
                         } else {
-                            // 하루질문 (4): 해당 게시글 날짜에서 questionOrder=4인 질문 찾기
-                            targetQuestion = todayQuestionRepository.findByMemberAndQuestionOrderAndSelectedDate(
-                                    postEntity.getMember(), answerOrder, postDate);
+                            lookupKey = mId + ":" + answerOrder + ":" + postDate;
                         }
 
-                        if (targetQuestion.isPresent()) {
-                            firstQuestion = targetQuestion.get().getQuestionContent();
+                        TodayQuestion tq = questionLookup.get(lookupKey);
+                        if (tq != null) {
+                            firstQuestion = tq.getQuestionContent();
                         }
                     }
 

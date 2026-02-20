@@ -13,6 +13,7 @@ import com.coredisc.infrastructure.repository.follow.queryDSL.QueryFollowReposit
 import com.coredisc.presentation.dto.cursor.CursorDTO;
 import com.coredisc.presentation.dto.follow.FollowResponseDTO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
@@ -136,5 +137,17 @@ public class FollowQueryServiceImpl implements FollowQueryService {
         int totalCount = queryFollowRepository.countFollowings(targetMember);
 
         return FollowConverter.toFollowingListDTO(totalCount, cursorDTO);
+    }
+
+    @Override
+    @Cacheable(value = "followingIds", key = "#memberId")
+    public List<Long> getFollowingIds(Long memberId) {
+        return queryFollowRepository.findFollowingIds(memberId);
+    }
+
+    @Override
+    @Cacheable(value = "circleIds", key = "#memberId")
+    public List<Long> getCircleFollowingIds(Long memberId) {
+        return queryFollowRepository.findCircleFollowingIds(memberId);
     }
 }
