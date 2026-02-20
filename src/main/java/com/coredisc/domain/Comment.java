@@ -13,6 +13,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
+@Table(indexes = {
+    @Index(name = "idx_comment_post_depth_id", columnList = "post_id, depth, id"),
+    @Index(name = "idx_comment_parent_id", columnList = "parent_id, id")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor

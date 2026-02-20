@@ -6,6 +6,9 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
+@Table(indexes = {
+    @Index(name = "idx_device_member_active", columnList = "member_id, is_active")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor

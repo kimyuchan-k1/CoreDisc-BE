@@ -6,6 +6,9 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
+@Table(indexes = {
+    @Index(name = "idx_follow_follower_circle", columnList = "follower_id, is_circle")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor

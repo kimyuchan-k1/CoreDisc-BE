@@ -14,6 +14,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
+@Table(indexes = {
+    @Index(name = "idx_post_member_status", columnList = "member_id, status"),
+    @Index(name = "idx_post_status_created", columnList = "status, created_at")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
