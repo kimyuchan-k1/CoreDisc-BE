@@ -73,6 +73,13 @@ dependencies {
     implementation 'com.google.firebase:firebase-admin:9.5.0'
     //EXIF 메타데이터 처리
     implementation 'com.drewnoakes:metadata-extractor:2.18.0'
+
+    // SQL 로깅 (p6spy)
+    implementation 'com.github.gavlyukovskiy:p6spy-spring-boot-starter:1.9.0'
+
+    // Cache (Caffeine)
+    implementation 'org.springframework.boot:spring-boot-starter-cache'
+    implementation 'com.github.ben-manes.caffeine:caffeine'
 }
 
 tasks.named('test') {
