@@ -26,4 +26,10 @@ public interface PostAnswerRepository {
             LocalDateTime startOfDay,
             LocalDateTime endOfDay
     );
+
+    List<Object[]> findAnswerOrdersByMemberIdsAndCreatedAtBetween(
+            List<Long> memberIds,
+            LocalDateTime startOfDay,
+            LocalDateTime endOfDay
+    );
 }

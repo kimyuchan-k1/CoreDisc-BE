@@ -37,7 +37,7 @@ public interface PostRepository {
     List<PostAnswer> findTempPostWithAnswers(Long postId);
 
     // 게시글 동적 조회
-    List<PostResponseDTO.PostFeedResponseDTO.PostSummary> findPostFeed(Member member, FeedType feedType, Long lastPostId, Integer size);
+    List<PostResponseDTO.PostFeedResponseDTO.PostSummary> findPostFeed(Member member, FeedType feedType, Long lastPostId, Integer size, List<Long> followingIds, List<Long> circleIds);
 
     // 디스크, 캘린더, 통계용
     List<CalendarPostDTO> findPostInfoByMemberAndMonth(int year, int month, Member member);
@@ -50,6 +50,8 @@ public interface PostRepository {
     boolean existsByMemberAndStatusAndCreatedAtBetween(Member member, PostStatus status, LocalDateTime startOfDay, LocalDateTime endOfDay);
 
     List<Post> findAllByStatusAndCreatedAtBefore(PostStatus status, LocalDateTime createdAt);
+
+    org.springframework.data.domain.Page<Post> findTempPostsPageable(PostStatus status, LocalDateTime createdAt, Pageable pageable);
 
     List<Long> findDistinctMemberIdsByStatusAndCreatedAtBetween(PostStatus postStatus, LocalDateTime startOfDay, LocalDateTime endOfDay);
 }

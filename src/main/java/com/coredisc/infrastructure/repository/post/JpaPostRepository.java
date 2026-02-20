@@ -5,6 +5,8 @@ import com.coredisc.domain.common.enums.PostStatus;
 import com.coredisc.domain.member.Member;
 import com.coredisc.domain.common.enums.PublicityType;
 import com.coredisc.domain.post.Post;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -23,6 +25,8 @@ public interface JpaPostRepository extends JpaRepository<Post, Long> {
     List<Post> findAllByMemberAndCreatedAtBetweenOrderByCreatedAtAsc(Member member, LocalDateTime start, LocalDateTime end);
 
     List<Post> findAllByStatusAndCreatedAtBefore(PostStatus status, LocalDateTime startOfDay);
+
+    Page<Post> findAllByStatusAndCreatedAtBefore(PostStatus status, LocalDateTime startOfDay, Pageable pageable);
 
     @Query("""
         select distinct p.member.id

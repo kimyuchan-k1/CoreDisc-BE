@@ -5,19 +5,33 @@ import com.coredisc.application.service.post.PostCommandService;
 import com.coredisc.application.service.reportStat.ReportStatBatchService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class BatchScheduler {
 
     private final DiscBatchService discBatchService;
     private final ReportStatBatchService reportStatBatchService;
     private final PostCommandService postCommandService;
+    private final ThreadPoolTaskExecutor batchExecutor;
+
+    public BatchScheduler(
+            DiscBatchService discBatchService,
+            ReportStatBatchService reportStatBatchService,
+            PostCommandService postCommandService,
+            @Qualifier("batchExecutor") ThreadPoolTaskExecutor batchExecutor) {
+        this.discBatchService = discBatchService;
+        this.reportStatBatchService = reportStatBatchService;
+        this.postCommandService = postCommandService;
+        this.batchExecutor = batchExecutor;
+    }
 
     // 매일 자정 (00:00:00)
     @Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")
@@ -53,40 +67,29 @@ public class BatchScheduler {
     }
 
     private void runDailyBatch(LocalDate targetDate) {
-        int errorCount = 0;
+        long startTime = System.currentTimeMillis();
 
-        try {
-            reportStatBatchService.generateDailyStatistics(targetDate);
-        } catch (Exception e) {
-            errorCount++;
-            log.error("[배치] generateDailyStatistics 에러: {}", e.getMessage(), e);
-        }
+        // 4개 통계 작업을 병렬 실행
+        CompletableFuture<Void> dailyStats = CompletableFuture.runAsync(
+                () -> reportStatBatchService.generateDailyStatistics(targetDate), batchExecutor
+        ).exceptionally(e -> { log.error("[배치] generateDailyStatistics 에러: {}", e.getMessage(), e); return null; });
 
-        try {
-            reportStatBatchService.generateMonthlyFixedQuestionStats(targetDate);
-        } catch (Exception e) {
-            errorCount++;
-            log.error("[배치] generateMonthlyFixedQuestionStats 에러: {}", e.getMessage(), e);
-        }
+        CompletableFuture<Void> fixedStats = CompletableFuture.runAsync(
+                () -> reportStatBatchService.generateMonthlyFixedQuestionStats(targetDate), batchExecutor
+        ).exceptionally(e -> { log.error("[배치] generateMonthlyFixedQuestionStats 에러: {}", e.getMessage(), e); return null; });
 
-        try {
-            reportStatBatchService.generateRandomQuestionsStats(targetDate);
-        } catch (Exception e) {
-            errorCount++;
-            log.error("[배치] generateRandomQuestionsStats 에러: {}", e.getMessage(), e);
-        }
+        CompletableFuture<Void> randomStats = CompletableFuture.runAsync(
+                () -> reportStatBatchService.generateRandomQuestionsStats(targetDate), batchExecutor
+        ).exceptionally(e -> { log.error("[배치] generateRandomQuestionsStats 에러: {}", e.getMessage(), e); return null; });
 
-        try {
-            reportStatBatchService.generateMonthlySelectionDiaryStats(targetDate);
-        } catch (Exception e) {
-            errorCount++;
-            log.error("[배치] generateMonthlySelectionDiaryStats 에러: {}", e.getMessage(), e);
-        }
+        CompletableFuture<Void> diaryStats = CompletableFuture.runAsync(
+                () -> reportStatBatchService.generateMonthlySelectionDiaryStats(targetDate), batchExecutor
+        ).exceptionally(e -> { log.error("[배치] generateMonthlySelectionDiaryStats 에러: {}", e.getMessage(), e); return null; });
 
-        if (errorCount > 0) {
-            log.warn("[배치] {}일자 통계 배치 작업 완료 - 에러 발생 횟수: {}", targetDate, errorCount);
-        } else {
-            log.info("[배치] {}일자 통계 배치 작업 완료 - 에러 없이 정상 종료", targetDate);
-        }
+        // 모든 작업 완료 대기
+        CompletableFuture.allOf(dailyStats, fixedStats, randomStats, diaryStats).join();
+
+        long elapsed = System.currentTimeMillis() - startTime;
+        log.info("[배치] {}일자 통계 배치 작업 완료 - 병렬 실행 소요시간: {}ms", targetDate, elapsed);
     }
 }

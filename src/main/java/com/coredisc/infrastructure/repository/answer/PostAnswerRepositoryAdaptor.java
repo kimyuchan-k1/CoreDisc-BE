@@ -63,4 +63,9 @@ public class PostAnswerRepositoryAdaptor implements PostAnswerRepository {
         return jpaPostAnswerRepository.existsByPostMemberAndAnswerOrderAndPostCreatedAtBetween(member, order, startOfDay, endOfDay);
     }
 
+    @Override
+    public List<Object[]> findAnswerOrdersByMemberIdsAndCreatedAtBetween(List<Long> memberIds, LocalDateTime startOfDay, LocalDateTime endOfDay) {
+        return jpaPostAnswerRepository.findAnswerOrdersByMemberIdsAndCreatedAtBetween(memberIds, startOfDay, endOfDay);
+    }
+
 }

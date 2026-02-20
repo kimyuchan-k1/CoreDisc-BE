@@ -9,7 +9,7 @@ import com.coredisc.domain.mapping.notificationReminderSetting.NotificationRemin
 import com.coredisc.domain.member.Member;
 import com.coredisc.domain.postAnswer.PostAnswerRepository;
 import com.coredisc.domain.todayQuestion.TodayQuestion;
-import com.coredisc.infrastructure.repository.question.JpaTodayQuestionRepository;
+import com.coredisc.domain.todayQuestion.TodayQuestionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -20,10 +20,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -32,7 +30,7 @@ import java.util.Optional;
 public class NotificationReminderScheduler {
 
     private final NotificationReminderSettingRepository notificationReminderSettingRepository;
-    private final JpaTodayQuestionRepository todayQuestionRepository;
+    private final TodayQuestionRepository todayQuestionRepository;
     private final PostAnswerRepository postAnswerRepository;
     private final DeviceRepository deviceRepository;
     private final FcmService fcmService;
@@ -53,193 +51,142 @@ public class NotificationReminderScheduler {
         List<NotificationReminderSetting> dailyTargets =
                 notificationReminderSettingRepository
                         .findAllByDailyReminderEnabledTrueAndDailyReminderTime(hh, mm);
-        dailyTargets.forEach(setting -> processDailyReminder(setting.getMember(), today));
-
 
         /*
         미응답 리마인더 알림 생성 (사용자가 설정한 시간에 생성되도록 시간, 분 매칭)
-        - 고정질문 < 4일 때 => 질문 생성해보세요 알림
-        - 답변 작성 X => 답변 작성해보세요 알림
-        - 오늘 답변 전부 마무리한 상태 => 알림 발송 X
         */
         List<NotificationReminderSetting> unansweredTargets =
                 notificationReminderSettingRepository.findAllByUnansweredReminderEnabledTrueAndDailyReminderTime(hh, mm);
-        unansweredTargets.forEach(notificationReminderSetting -> processUnansweredReminder(notificationReminderSetting.getMember(), today));
-    }
 
-    private void processDailyReminder(Member member, LocalDate today) {
-        List<Device> devices = deviceRepository.findByMemberAndIsActiveTrue(member);
+        // 모든 대상 멤버 ID 수집
+        Set<Long> allMemberIds = new HashSet<>();
+        dailyTargets.forEach(s -> allMemberIds.add(s.getMember().getId()));
+        unansweredTargets.forEach(s -> allMemberIds.add(s.getMember().getId()));
 
-        if (devices.isEmpty()) {
-            log.info("이 멤버 디바이스 토큰 없음 memberId={}", member.getId());
-            return;
+        if (allMemberIds.isEmpty()) return;
+
+        // 배치 쿼리: 모든 대상 멤버의 TodayQuestion 한번에 조회
+        LocalDate startOfMonth = today.withDayOfMonth(1);
+        LocalDate endOfMonth = startOfMonth.plusMonths(1).minusDays(1);
+
+        List<TodayQuestion> allQuestions = todayQuestionRepository
+                .findByMemberIdInAndQuestionOrderInAndSelectedDateBetween(
+                        new ArrayList<>(allMemberIds),
+                        List.of(1, 2, 3, 4),
+                        startOfMonth,
+                        endOfMonth
+                );
+
+        // 멤버별 질문 순서 맵 구성 (questionOrder 4는 오늘 날짜만 필터)
+        Map<Long, Set<Integer>> memberQuestionOrders = new HashMap<>();
+        for (TodayQuestion q : allQuestions) {
+            if (q.getQuestionOrder() == 4 && !q.getSelectedDate().equals(today)) continue;
+            if (q.getQuestionContent() == null || q.getQuestionContent().isBlank()) continue;
+
+            memberQuestionOrders
+                    .computeIfAbsent(q.getMember().getId(), k -> new HashSet<>())
+                    .add(q.getQuestionOrder());
         }
 
-        if (hasTodayQuestions(member, today)) {
-            // FCM - 질문 생성 알림
+        // 배치 쿼리: 모든 대상 멤버의 오늘 답변 순서 한번에 조회
+        LocalDateTime startOfDay = today.atStartOfDay();
+        LocalDateTime endOfDay = today.plusDays(1).atStartOfDay();
 
-            // 푸시 알림에 보낼 데이터 설정 (알림 타입 및 알림 클릭 -> 이동할 targetId)
-            Map<String, String> data = new HashMap<>();
-            data.put("notificationType", NotificationType.DAILY_REMINDER.name());
-            // targetId는 추가하지 않음
+        List<Object[]> answerData = postAnswerRepository
+                .findAnswerOrdersByMemberIdsAndCreatedAtBetween(
+                        new ArrayList<>(allMemberIds), startOfDay, endOfDay
+                );
 
-            for (Device device : devices) {
-                String token = device.getToken();
+        // 멤버별 답변 순서 맵 구성
+        Map<Long, Set<Integer>> memberAnswerOrders = new HashMap<>();
+        for (Object[] row : answerData) {
+            Long memberId = (Long) row[0];
+            Integer answerOrder = (Integer) row[1];
+            memberAnswerOrders
+                    .computeIfAbsent(memberId, k -> new HashSet<>())
+                    .add(answerOrder);
+        }
 
-                // 토큰 유효성 검사
-                if (fcmService.isTokenValid(token)) {
-                    // 유효한 토큰에 대해서만 알림 발송
-                    fcmService.sendNotificationToToken(
-                            token,
-                            "질문 선택 필요",
-                            "오늘의 질문이 완성되지 않았어요.\n" +
-                                    "먼저 하나 골라볼까요?",
-                            data
-                    );
-                } else {
-                    log.warn("유효하지 않은 토큰 발견: memberId={}, token={}", member.getId(), token);
-                }
-            }
+        // 데일리 리마인더 처리
+        dailyTargets.forEach(setting -> processDailyReminder(
+                setting.getMember(), memberQuestionOrders, memberAnswerOrders));
+
+        // 미응답 리마인더 처리
+        unansweredTargets.forEach(setting -> processUnansweredReminder(
+                setting.getMember(), memberQuestionOrders, memberAnswerOrders));
+    }
+
+    private void processDailyReminder(Member member,
+                                      Map<Long, Set<Integer>> questionMap,
+                                      Map<Long, Set<Integer>> answerMap) {
+        List<Device> devices = deviceRepository.findByMemberAndIsActiveTrue(member);
+        if (devices.isEmpty()) return;
+
+        boolean hasAllQuestions = hasAllFourQuestions(member.getId(), questionMap);
+
+        if (!hasAllQuestions) {
+            sendFcmToDevices(devices, member, "질문 선택 필요",
+                    "오늘의 질문이 완성되지 않았어요.\n먼저 하나 골라볼까요?",
+                    NotificationType.DAILY_REMINDER);
             log.info("DAILY_REMINDER - memberId={} : 오늘의 질문을 생성해 주세요.", member.getId());
-        } else if (hasUnansweredQuestions(member, today)) {
-            //FCM - 답변 작성 알림
-
-            // 푸시 알림에 보낼 데이터 설정 (알림 타입 및 알림 클릭 -> 이동할 targetId)
-            Map<String, String> data = new HashMap<>();
-            data.put("notificationType", NotificationType.DAILY_REMINDER_ANSWER.name());
-            // targetId는 추가하지 않음
-
-            for (Device device : devices) {
-                String token = device.getToken();
-
-                // 토큰 유효성 검사
-                if (fcmService.isTokenValid(token)) {
-                    // 유효한 토큰에 대해서만 알림 발송
-                    fcmService.sendNotificationToToken(
-                            token,
-                            "Disc 준비 완료",
-                            "오늘 Disc가 준비됐어요.\n" +
-                                    "Core에 한 조각 더해볼까요?",
-                            data
-                    );
-                } else {
-                    log.warn("유효하지 않은 토큰 발견: memberId={}, token={}", member.getId(), token);
-                }
-            }
+        } else if (!hasAllFourAnswers(member.getId(), answerMap)) {
+            sendFcmToDevices(devices, member, "Disc 준비 완료",
+                    "오늘 Disc가 준비됐어요.\nCore에 한 조각 더해볼까요?",
+                    NotificationType.DAILY_REMINDER_ANSWER);
             log.info("DAILY_REMINDER - memberId={} : 오늘의 질문 답변을 작성해 주세요.", member.getId());
         } else {
             log.info("DAILY_REMINDER - memberId={} : 모든 질문 답변 완료했으니까 알림 미발송", member.getId());
         }
     }
 
-    private void processUnansweredReminder(Member member, LocalDate today) {
+    private void processUnansweredReminder(Member member,
+                                           Map<Long, Set<Integer>> questionMap,
+                                           Map<Long, Set<Integer>> answerMap) {
         List<Device> devices = deviceRepository.findByMemberAndIsActiveTrue(member);
+        if (devices.isEmpty()) return;
 
-        if (devices.isEmpty()) {
-            log.info("이 멤버 디바이스 토큰 없음 memberId={}", member.getId());
-            return;
-        }
+        boolean hasAllQuestions = hasAllFourQuestions(member.getId(), questionMap);
 
-        if (hasTodayQuestions(member, today)) {
-            //FCM - 질문 생성 알림
-
-            // 푸시 알림에 보낼 데이터 설정 (알림 타입 및 알림 클릭 -> 이동할 targetId)
-            Map<String, String> data = new HashMap<>();
-            data.put("notificationType", NotificationType.UNANSWERED_QUESTION.name());
-            // targetId는 추가하지 않음
-
-            for (Device device : devices) {
-                String token = device.getToken();
-
-                // 토큰 유효성 검사
-                if (fcmService.isTokenValid(token)) {
-                    // 유효한 토큰에 대해서만 알림 발송
-                    fcmService.sendNotificationToToken(
-                            token,
-                            "마지막 질문 기회",
-                            "Core를 완성하려면 지금이에요.\n" +
-                                    "오늘 질문이 비어있어요.",
-                            data
-                    );
-                } else {
-                    log.warn("유효하지 않은 토큰 발견: memberId={}, token={}", member.getId(), token);
-                }
-            }
+        if (!hasAllQuestions) {
+            sendFcmToDevices(devices, member, "마지막 질문 기회",
+                    "Core를 완성하려면 지금이에요.\n오늘 질문이 비어있어요.",
+                    NotificationType.UNANSWERED_QUESTION);
             log.info("UNANSWERED_QUESTION - memberId={} : 오늘의 질문을 생성해 주세요.", member.getId());
-        } else if (hasUnansweredQuestions(member, today)) {
-            //FCM - 답변 작성 알림
-
-            // 푸시 알림에 보낼 데이터 설정 (알림 타입 및 알림 클릭 -> 이동할 targetId)
-            Map<String, String> data = new HashMap<>();
-            data.put("notificationType", NotificationType.UNANSWERED_QUESTION_ANSWER.name());
-            // targetId는 추가하지 않음
-
-            for (Device device : devices) {
-                String token = device.getToken();
-
-                // 토큰 유효성 검사
-                if (fcmService.isTokenValid(token)) {
-                    // 유효한 토큰에 대해서만 알림 발송
-                    fcmService.sendNotificationToToken(
-                            token,
-                            "CoreDisc 미완성",
-                            "오늘의 CoreDisc가 아직 없어요.\n" +
-                                    "놓치면 내일로 넘어가요.",
-                            data
-                    );
-                } else {
-                    log.warn("유효하지 않은 토큰 발견: memberId={}, token={}", member.getId(), token);
-                }
-            }
+        } else if (!hasAllFourAnswers(member.getId(), answerMap)) {
+            sendFcmToDevices(devices, member, "CoreDisc 미완성",
+                    "오늘의 CoreDisc가 아직 없어요.\n놓치면 내일로 넘어가요.",
+                    NotificationType.UNANSWERED_QUESTION_ANSWER);
             log.info("UNANSWERED_QUESTION - memberId={} : 오늘의 질문 답변을 마저 작성해 주세요.", member.getId());
         } else {
             log.info("UNANSWERED_QUESTION - memberId={} : 모든 질문 답변 완료했으니까 알림 미발송", member.getId());
         }
     }
 
-    // 오늘의 질문 중 하나라도 없는지 체크
-    private boolean hasTodayQuestions(Member member, LocalDate today) {
-        LocalDate startOfMonth = today.withDayOfMonth(1);
-        LocalDate endOfMonth = startOfMonth.plusMonths(1).minusDays(1);
-
-        for (int order = 1; order <= 4; order++) {
-            Optional<TodayQuestion> todayQuestion = (order == 4)
-                    ? todayQuestionRepository.findByMemberAndQuestionOrderAndSelectedDate(member, order, today)
-                    : todayQuestionRepository.findByMemberAndQuestionOrderAndSelectedDateBetween(member, order, startOfMonth, endOfMonth);
-
-            // 질문이 없거나, 내용이 비어있으면 true
-            if (todayQuestion.isEmpty() || todayQuestion.get().getQuestionContent() == null || todayQuestion.get().getQuestionContent().isBlank()) {
-                return true;
-            }
-        }
-        return false; // 4개 다 있음
+    // 배치 조회 결과로 4개 질문이 모두 있는지 확인 (DB 쿼리 없음)
+    private boolean hasAllFourQuestions(Long memberId, Map<Long, Set<Integer>> questionMap) {
+        Set<Integer> orders = questionMap.getOrDefault(memberId, Set.of());
+        return orders.contains(1) && orders.contains(2) && orders.contains(3) && orders.contains(4);
     }
 
-    // 오늘의 질문에 대한 답변 하나라도 없는지 체크
-    private boolean hasUnansweredQuestions(Member member, LocalDate today) {
-        LocalDate startOfMonth = today.withDayOfMonth(1);
-        LocalDate endOfMonth = startOfMonth.plusMonths(1).minusDays(1);
-
-        LocalDateTime startOfDay = today.atStartOfDay();
-        LocalDateTime endOfDay = today.atTime(LocalTime.MAX);
-
-        for (int order = 1; order <= 4; order++) {
-            Optional<TodayQuestion> todayQuestion = (order == 4)
-                    ? todayQuestionRepository.findByMemberAndQuestionOrderAndSelectedDate(member, order, today)
-                    : todayQuestionRepository.findByMemberAndQuestionOrderAndSelectedDateBetween(member, order, startOfMonth, endOfMonth);
-
-            if (todayQuestion.isEmpty()) {
-                return true; // 질문이 없으면 답변도 없음
-            }
-
-            // 질문별 답변 존재 여부 확인
-            if (! postAnswerRepository.existsByPostMemberAndAnswerOrderAndPostCreatedAtBetween(member, order, startOfDay, endOfDay)) {
-                return true; // 번호에 해당되는 답변이 없음
-            }
-
-        }
-
-        return false; // 전부 답변 있음
+    // 배치 조회 결과로 4개 답변이 모두 있는지 확인 (DB 쿼리 없음)
+    private boolean hasAllFourAnswers(Long memberId, Map<Long, Set<Integer>> answerMap) {
+        Set<Integer> orders = answerMap.getOrDefault(memberId, Set.of());
+        return orders.contains(1) && orders.contains(2) && orders.contains(3) && orders.contains(4);
     }
 
+    // FCM 전송 공통 메서드
+    private void sendFcmToDevices(List<Device> devices, Member member,
+                                  String title, String body, NotificationType type) {
+        Map<String, String> data = new HashMap<>();
+        data.put("notificationType", type.name());
+
+        for (Device device : devices) {
+            String token = device.getToken();
+            if (fcmService.isTokenValid(token)) {
+                fcmService.sendNotificationToToken(token, title, body, data);
+            } else {
+                log.warn("유효하지 않은 토큰 발견: memberId={}, token={}", member.getId(), token);
+            }
+        }
+    }
 }

@@ -408,38 +408,47 @@ public class PostCommandServiceImpl implements PostCommandService {
     }
 
     /**
-     * 임시저장 게시글 정리 (배치 작업용)
+     * 임시저장 게시글 정리 (배치 작업용) — 청크 기반 페이지네이션
      */
     @Transactional
     public void cleanupOldTempPosts(LocalDate cutoffDate) {
         log.info("[배치] {}일 이전 임시저장 게시글 정리 작업 시작", cutoffDate);
 
+        final int CHUNK_SIZE = 100;
+        int deletedCount = 0;
+        int failedCount = 0;
+        int page = 0;
 
-        List<Post> postToDelete = postRepository.findAllByStatusAndCreatedAtBefore(PostStatus.TEMP, cutoffDate.plusDays(1).atStartOfDay());
+        org.springframework.data.domain.Page<Post> postPage;
+        do {
+            // 항상 page=0으로 조회 (삭제하면 다음 페이지 데이터가 당겨오므로)
+            postPage = postRepository.findTempPostsPageable(
+                    PostStatus.TEMP,
+                    cutoffDate.plusDays(1).atStartOfDay(),
+                    org.springframework.data.domain.PageRequest.of(0, CHUNK_SIZE)
+            );
 
-        int deletedCount =0;
+            for (Post post : postPage.getContent()) {
+                try {
+                    List<String> imageUrls = extractImageUrls(post);
+                    List<String> thumbnailUrls = extractThumbnailUrls(post);
 
+                    amazonS3Manager.deleteImagesByUrls(imageUrls);
+                    amazonS3Manager.deleteImagesByUrls(thumbnailUrls);
 
-        for(Post post : postToDelete) {
-            try {
-                List<String> imageUrls =extractImageUrls(post);
-                List<String> thumbnailUrls = extractThumbnailUrls(post);
-
-                amazonS3Manager.deleteImagesByUrls(imageUrls);
-                amazonS3Manager.deleteImagesByUrls(thumbnailUrls);
-
-                postRepository.delete(post);
-                deletedCount++;
-
+                    postRepository.delete(post);
+                    deletedCount++;
+                } catch (Exception e) {
+                    failedCount++;
+                    log.error("TEMP 게시글 삭제 실패 - ID: {}, 에러: {}", post.getId(), e.getMessage());
+                }
             }
-            catch (Exception e) {
-                log.error("TEMP 게시글 삭제 실패 - ID: {}, 에러: {}", post.getId(), e.getMessage(), e);
-                throw new PostHandler(ErrorStatus._INTERNAL_SERVER_ERROR);
-            }
-        }
 
+            page++;
+            log.info("[배치] 청크 {} 처리 완료 - 이번 청크 {}건", page, postPage.getNumberOfElements());
+        } while (postPage.hasNext());
 
-        log.info("[배치] 임시저장 게시글 삭제 완료 - 총 {}건", deletedCount);
+        log.info("[배치] 임시저장 게시글 삭제 완료 - 성공: {}건, 실패: {}건", deletedCount, failedCount);
     }
 
 }

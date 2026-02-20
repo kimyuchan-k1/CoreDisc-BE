@@ -91,8 +91,8 @@ public class PostRepositoryAdaptor implements PostRepository {
     }
 
     @Override
-    public List<PostResponseDTO.PostFeedResponseDTO.PostSummary> findPostFeed(Member member, FeedType feedType, Long lastPostId, Integer size) {
-        return queryPostRepository.findPostFeed(member.getId(), feedType, lastPostId, size);
+    public List<PostResponseDTO.PostFeedResponseDTO.PostSummary> findPostFeed(Member member, FeedType feedType, Long lastPostId, Integer size, List<Long> followingIds, List<Long> circleIds) {
+        return queryPostRepository.findPostFeed(member.getId(), feedType, lastPostId, size, followingIds, circleIds);
     }
 
 
@@ -112,6 +112,11 @@ public class PostRepositoryAdaptor implements PostRepository {
     @Override
     public List<Post> findAllByStatusAndCreatedAtBefore(PostStatus status, LocalDateTime createdAt) {
         return jpaPostRepository.findAllByStatusAndCreatedAtBefore(status, createdAt);
+    }
+
+    @Override
+    public org.springframework.data.domain.Page<Post> findTempPostsPageable(PostStatus status, LocalDateTime createdAt, Pageable pageable) {
+        return jpaPostRepository.findAllByStatusAndCreatedAtBefore(status, createdAt, pageable);
     }
 
     @Override
