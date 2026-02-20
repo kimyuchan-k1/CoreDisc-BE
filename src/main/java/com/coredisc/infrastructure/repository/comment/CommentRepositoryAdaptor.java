@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Repository
@@ -47,8 +48,11 @@ public class CommentRepositoryAdaptor implements CommentRepository {
     @Override
     public CursorDTO<Comment> findRepliesByParentId(Long parentId, Long cursorId, Integer size, Long memberId) {
         return commentQueryRepository.findRepliesByParentIds(parentId,cursorId,size,memberId);
-
     }
 
+    @Override
+    public Map<Long, Long> countRepliesByParentIds(List<Long> parentIds) {
+        return commentQueryRepository.countRepliesByParentIds(parentIds);
+    }
 
 }

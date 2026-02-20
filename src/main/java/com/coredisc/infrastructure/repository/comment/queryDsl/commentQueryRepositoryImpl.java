@@ -3,13 +3,18 @@ package com.coredisc.infrastructure.repository.comment.queryDsl;
 import com.coredisc.domain.Comment;
 import com.coredisc.domain.QComment;
 import com.coredisc.presentation.dto.cursor.CursorDTO;
+import com.querydsl.core.Tuple;
 import com.querydsl.jpa.impl.JPAQueryFactory;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.coredisc.domain.QComment.*;
+import static com.coredisc.domain.member.QMember.*;
+import static com.coredisc.domain.profileImg.QProfileImg.*;
 
 @Repository
 @RequiredArgsConstructor
@@ -23,6 +28,8 @@ public class commentQueryRepositoryImpl implements CommentQueryRepository{
 
         List<Comment> results = queryFactory
                 .selectFrom(comment)
+                .leftJoin(comment.member, member).fetchJoin()
+                .leftJoin(member.profileImg, profileImg).fetchJoin()
                 .where(
                         comment.post.id.eq(postId),
                         comment.depth.eq(0),
@@ -38,6 +45,8 @@ public class commentQueryRepositoryImpl implements CommentQueryRepository{
     public CursorDTO<Comment> findRepliesByParentIds(Long parentId, Long cursorId, Integer size, Long memberId) {
         List<Comment> results = queryFactory
                 .selectFrom(comment)
+                .leftJoin(comment.member, member).fetchJoin()
+                .leftJoin(member.profileImg, profileImg).fetchJoin()
                 .where(
                         comment.parent.id.eq(parentId),
                         cursorId != null ? comment.id.lt(cursorId) : null
@@ -47,6 +56,24 @@ public class commentQueryRepositoryImpl implements CommentQueryRepository{
                 .fetch();
 
         return buildCursorPage(results,size);
+    }
+
+    @Override
+    public Map<Long, Long> countRepliesByParentIds(List<Long> parentIds) {
+        QComment reply = new QComment("reply");
+
+        List<Tuple> results = queryFactory
+                .select(reply.parent.id, reply.count())
+                .from(reply)
+                .where(reply.parent.id.in(parentIds))
+                .groupBy(reply.parent.id)
+                .fetch();
+
+        return results.stream()
+                .collect(Collectors.toMap(
+                        tuple -> tuple.get(reply.parent.id),
+                        tuple -> tuple.get(reply.count())
+                ));
     }
 
     private CursorDTO<Comment> buildCursorPage(List<Comment> results, int size){

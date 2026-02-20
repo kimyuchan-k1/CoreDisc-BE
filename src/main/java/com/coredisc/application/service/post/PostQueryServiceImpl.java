@@ -1,11 +1,11 @@
 package com.coredisc.application.service.post;
 
+import com.coredisc.application.service.follow.FollowQueryService;
 import com.coredisc.common.apiPayload.status.ErrorStatus;
 import com.coredisc.common.converter.PostConverter;
 import com.coredisc.common.exception.handler.PostHandler;
 import com.coredisc.domain.common.enums.PostStatus;
 import com.coredisc.domain.member.Member;
-import com.coredisc.domain.member.MemberRepository;
 import com.coredisc.domain.post.Post;
 import com.coredisc.domain.post.PostAnswer;
 import com.coredisc.domain.post.PostLikeRepository;
@@ -16,24 +16,22 @@ import com.coredisc.presentation.dto.post.PostRequestDTO;
 import com.coredisc.presentation.dto.post.PostResponseDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.core.parameters.P;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Transactional(readOnly = true)
 public class PostQueryServiceImpl implements PostQueryService {
 
     private final PostRepository postRepository;
-    private final MemberRepository memberRepository;
     private final PostLikeRepository postLikeRepository;
     private final TodayQuestionRepository todayQuestionRepository;
+    private final FollowQueryService followQueryService;
 
     @Override
     public List<Post> getTempPosts(Member member) {
@@ -74,11 +72,17 @@ public class PostQueryServiceImpl implements PostQueryService {
 
     @Override
     public PostResponseDTO.PostFeedResponseDTO findPostFeed(Member member, PostRequestDTO.PostFeedRequestDto request) {
+        // 캐시된 팔로잉/서클 ID 목록 조회 (Caffeine 캐시 히트 시 DB 쿼리 없음)
+        List<Long> followingIds = followQueryService.getFollowingIds(member.getId());
+        List<Long> circleIds = followQueryService.getCircleFollowingIds(member.getId());
+
         List<PostResponseDTO.PostFeedResponseDTO.PostSummary> posts = postRepository.findPostFeed(
                 member,
                 request.getFeedType(),
                 request.getLastPostId(),
-                request.getSize()
+                request.getSize(),
+                followingIds,
+                circleIds
         );
 
         // hasNext 체크
@@ -135,32 +139,28 @@ public class PostQueryServiceImpl implements PostQueryService {
 
     private List<TodayQuestion> findQuestionContent(Member member, LocalDate date) {
 
-        List<TodayQuestion> questions = new ArrayList<>();
-        // 고정질문 3개 가져오기
-        for(int i =1; i<4; i++) {
-            LocalDate startOfMonth = date.withDayOfMonth(1);
-            LocalDate endOfMonth = startOfMonth.plusMonths(1).minusDays(1);
+        // 4개 개별 쿼리 → 1개 배치 쿼리 (@EntityGraph로 officialQuestion/personalQuestion 즉시 로딩)
+        LocalDate startOfMonth = date.withDayOfMonth(1);
+        LocalDate endOfMonth = startOfMonth.plusMonths(1).minusDays(1);
 
-            questions.add(todayQuestionRepository.findByMemberAndQuestionOrderAndSelectedDateBetween(member,i,startOfMonth,endOfMonth).get());
-        }
+        List<TodayQuestion> allQuestions = todayQuestionRepository.findByMemberIdInAndQuestionOrderInAndSelectedDateBetween(
+                List.of(member.getId()),
+                List.of(1, 2, 3, 4),
+                startOfMonth,
+                endOfMonth
+        );
 
-        questions.add(todayQuestionRepository.findByMemberAndQuestionOrderAndSelectedDate(member,4,date).get());
-        // 랜덤질문 1개 가져오기
-
-        return questions;
-
+        // questionOrder 4는 해당 날짜만 필터, 1~3은 월 범위 내 첫 번째만 사용
+        return allQuestions.stream()
+                .filter(q -> q.getQuestionOrder() != 4 || q.getSelectedDate().equals(date))
+                .toList();
     }
 
     /**
-     * 좋아요 여부 확인
+     * 좋아요 여부 확인 — ID 기반 쿼리로 엔티티 로딩 없이 직접 체크 (3 쿼리 → 1 쿼리)
      */
     private boolean checkIsLiked(Long memberId, Long postId) {
-        Member member = memberRepository.findById(memberId)
-                .orElseThrow(() -> new PostHandler(ErrorStatus.MEMBER_NOT_FOUND));
-        Post post = postRepository.findById(postId)
-                .orElseThrow(() -> new PostHandler(ErrorStatus.POST_NOT_FOUND));
-
-        return postLikeRepository.existsByMemberAndPost(member, post);
+        return postLikeRepository.existsByMemberIdAndPostId(memberId, postId);
     }
 
     private boolean checkIsOwner(Long currentMemberId, Long postOwnerId) {

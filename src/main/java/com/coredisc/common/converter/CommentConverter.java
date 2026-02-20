@@ -48,7 +48,7 @@ public class CommentConverter {
                 .build();
     }
 
-    public static CommentResponseDTO.CommentCreateResponse toCreateResponseWithChildExists(Comment comment,boolean hasChild, boolean isOwner) {
+    public static CommentResponseDTO.CommentCreateResponse toCreateResponseWithChildExists(Comment comment, boolean hasChild, int replyCount, boolean isOwner) {
         return CommentResponseDTO.CommentCreateResponse.builder()
                 .commentId(comment.getId())
                 .postId(comment.getPost().getId())
@@ -56,11 +56,10 @@ public class CommentConverter {
                 .parentId(comment.getParent() != null ? comment.getParent().getId() : null)
                 .depth(comment.getDepth())
                 .member(CommentConverter.toMemberInfo(comment.getMember()))
-                .replyCount(comment.getReplyCount())
+                .replyCount(replyCount)
                 .isOwner(isOwner)
                 .timeStamp(comment.toTimeStamp())
                 .hasReplies(hasChild)
-
                 .build();
     }
 
