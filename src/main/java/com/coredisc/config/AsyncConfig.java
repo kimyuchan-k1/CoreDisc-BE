@@ -15,18 +15,44 @@ public class AsyncConfig implements AsyncConfigurer {
 
     @Override
     @Bean(name = "mailExecutor")
-    public Executor getAsyncExecutor() { // @Async 메서드가 실행될 때 사용할 스레드 풀(Executor)을 리턴
+    public Executor getAsyncExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
-        executor.setCorePoolSize(2); // 기본적으로 유지할 스레드 수 (항상 실행 대기)
-        executor.setMaxPoolSize(5); // 최대 허용할 스레드 수
-        executor.setQueueCapacity(10); // 작업 대기 큐의 크기
-        executor.setThreadNamePrefix("Async MailExecutor-"); // 스레드 이름 접두사 (디버깅 시 보기 좋게)
-        executor.initialize(); // 설정이 끝난 후 Executor 초기화
+        executor.setCorePoolSize(2);
+        executor.setMaxPoolSize(5);
+        executor.setQueueCapacity(10);
+        executor.setThreadNamePrefix("Async MailExecutor-");
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean(name = "batchExecutor")
+    public ThreadPoolTaskExecutor batchExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(8);
+        executor.setQueueCapacity(20);
+        executor.setThreadNamePrefix("Batch-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
+        executor.initialize();
+        return executor;
+    }
+
+    @Bean(name = "notificationExecutor")
+    public ThreadPoolTaskExecutor notificationExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(4);
+        executor.setMaxPoolSize(10);
+        executor.setQueueCapacity(100);
+        executor.setThreadNamePrefix("Notification-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(30);
+        executor.initialize();
         return executor;
     }
 
     @Override
-    public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() { // @Async 메서드에서 예외가 발생했을 때 어떻게 처리할지 지정하는 부분
+    public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
         return AsyncConfigurer.super.getAsyncUncaughtExceptionHandler();
     }
 }
