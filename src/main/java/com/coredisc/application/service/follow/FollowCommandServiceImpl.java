@@ -1,31 +1,26 @@
 package com.coredisc.application.service.follow;
 
-import com.coredisc.application.service.fcm.FcmService;
-import com.coredisc.application.service.notification.NotificationCommandService;
+import com.coredisc.application.event.CircleChangedEvent;
+import com.coredisc.application.event.FollowedEvent;
+import com.coredisc.application.event.UnfollowedEvent;
+import com.coredisc.application.service.feed.FeedCacheService;
 import com.coredisc.common.apiPayload.status.ErrorStatus;
 import com.coredisc.common.converter.FollowConverter;
 import com.coredisc.common.exception.handler.CircleHandler;
 import com.coredisc.common.exception.handler.FollowHandler;
 import com.coredisc.common.exception.handler.MemberHandler;
 import com.coredisc.domain.block.BlockRepository;
-import com.coredisc.domain.common.enums.NotificationType;
-import com.coredisc.domain.device.Device;
-import com.coredisc.domain.device.DeviceRepository;
 import com.coredisc.domain.follow.Follow;
 import com.coredisc.domain.follow.FollowRepository;
 import com.coredisc.domain.member.Member;
 import com.coredisc.domain.member.MemberRepository;
-import com.coredisc.presentation.dto.notification.NotificationRequestDTO;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Caching;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
-
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @Service
@@ -36,9 +31,8 @@ public class FollowCommandServiceImpl implements FollowCommandService {
     private final MemberRepository memberRepository;
     private final FollowRepository followRepository;
     private final BlockRepository blockRepository;
-    private final DeviceRepository deviceRepository;
-    private final NotificationCommandService notificationCommandService;
-    private final FcmService fcmService;
+    private final ApplicationEventPublisher eventPublisher;
+    private final FeedCacheService feedCacheService;
 
     @Override
     @CacheEvict(value = "followingIds", key = "#member.id")
@@ -63,37 +57,8 @@ public class FollowCommandServiceImpl implements FollowCommandService {
 
         Follow follow = followRepository.save(FollowConverter.toFollow(member, target));
 
-        notificationCommandService.createNotification(
-                new NotificationRequestDTO(
-                        NotificationType.FOLLOW, // 알림 타입 (팔로우)
-                        member, // 알림 sender (내가 건 팔로우에 대한 알림을)
-                        target, // 알림 receiver (상대방이 받는)
-                        member.getNickname()+"님이 팔로우를 시작했어요.", // 팔로우 알림 content (sender의 닉네임 전달)
-                        member.getId() // 클릭 시 sender의 홈으로 접속해야 하니 sender의 id 전달
-                )
-        );
-
-        List<Device> devices = deviceRepository.findByMemberAndIsActiveTrue(target);
-
-        // 푸시 알림 내용 설정
-        String title = "CoreDisc";
-        String body = member.getNickname()+"님이 팔로우를 시작했어요.";
-
-        // 푸시 알림에 보낼 데이터 설정 (알림 타입 및 알림 클릭 -> 이동할 targetId)
-        Map<String, String> data = new HashMap<>();
-        data.put("notificationType", NotificationType.FOLLOW.name());
-        data.put("targetId", String.valueOf(member.getId()));
-        data.put("username", member.getNickname());
-
-        for (Device device : devices) {
-            String token = device.getToken();
-            if (fcmService.isTokenValid(token)) {
-                fcmService.sendNotificationToToken(token, title, body, data);
-                log.info("팔로우 알림 발송됨: memberId={}, token={}", target.getId(), token);
-            } else {
-                log.warn("팔로우 알림 발송 안됨: 유효하지 않은 토큰 발견. memberId={}, token={}", target.getId(), token);
-            }
-        }
+        // 비동기 이벤트로 알림 + FCM 전송 (트랜잭션 커밋 후 실행)
+        eventPublisher.publishEvent(FollowedEvent.of(member.getId(), targetId, member.getNickname()));
 
         return follow;
     }
@@ -131,10 +96,18 @@ public class FollowCommandServiceImpl implements FollowCommandService {
         }
 
         followRepository.delete(followToTarget);
+
+        // 동기적 피드 DTO 캐시 무효화 (Unfollow 후 상대 글 즉시 미노출)
+        feedCacheService.evict(member.getId());
+
+        eventPublisher.publishEvent(UnfollowedEvent.of(member.getId(), targetId));
     }
 
     @Override
-    @CacheEvict(value = "circleIds", key = "#targetId")
+    @Caching(evict = {
+            @CacheEvict(value = "circleIds", key = "#member.id"),
+            @CacheEvict(value = "circleIds", key = "#targetId")
+    })
     // 차단 시, Follow 관계가 삭제되기에 친친 설정 로직에서 차단 여부는 체크하지 않음
     public void updateCircleStatus(Member member, Long targetId, boolean isCircle) {
 
@@ -160,5 +133,7 @@ public class FollowCommandServiceImpl implements FollowCommandService {
 
         // 나를 팔로우 하고 있는 팔로워 중에서 친한친구 설정 가능
         followFromTarget.updateCircle(isCircle);
+
+        eventPublisher.publishEvent(CircleChangedEvent.of(member.getId(), targetId, isCircle));
     }
 }
