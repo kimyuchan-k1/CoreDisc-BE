@@ -1,0 +1,170 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "피드 경로 분포 (cache / inbox / pull)",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(increase(feed_request_total{path=\"cache\"}[5m]))",
+          "legendFormat": "cache"
+        },
+        {
+          "expr": "sum(increase(feed_request_total{path=\"inbox\"}[5m]))",
+          "legendFormat": "inbox"
+        },
+        {
+          "expr": "sum(increase(feed_request_total{path=\"pull\"}[5m]))",
+          "legendFormat": "pull"
+        }
+      ]
+    },
+    {
+      "title": "피드 레이턴시 p50 / p95 (경로별)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 16, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(feed_duration_seconds_bucket{path=\"cache\"}[1m])) by (le))",
+          "legendFormat": "cache p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(feed_duration_seconds_bucket{path=\"cache\"}[1m])) by (le))",
+          "legendFormat": "cache p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(feed_duration_seconds_bucket{path=\"inbox\"}[1m])) by (le))",
+          "legendFormat": "inbox p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(feed_duration_seconds_bucket{path=\"inbox\"}[1m])) by (le))",
+          "legendFormat": "inbox p95"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(feed_duration_seconds_bucket{path=\"pull\"}[1m])) by (le))",
+          "legendFormat": "pull p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(feed_duration_seconds_bucket{path=\"pull\"}[1m])) by (le))",
+          "legendFormat": "pull p95"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "Fan-out 레이턴시 분포",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(feed_fanout_duration_seconds_bucket[1m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(feed_fanout_duration_seconds_bucket[1m])) by (le))",
+          "legendFormat": "p95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(feed_fanout_duration_seconds_bucket[1m])) by (le))",
+          "legendFormat": "p99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      }
+    },
+    {
+      "title": "Redis Circuit Breaker 상태",
+      "type": "state-timeline",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "redis_circuit_state",
+          "legendFormat": "state (0=CLOSED, 1=OPEN, 2=HALF_OPEN)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "CLOSED", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "OPEN", "color": "red" } } },
+            { "type": "value", "options": { "2": { "text": "HALF_OPEN", "color": "yellow" } } }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Caffeine 캐시 히트율",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "rate(cache_gets_total{cache=\"followingIds\",result=\"hit\"}[1m]) / (rate(cache_gets_total{cache=\"followingIds\",result=\"hit\"}[1m]) + rate(cache_gets_total{cache=\"followingIds\",result=\"miss\"}[1m]))",
+          "legendFormat": "followingIds hit rate"
+        },
+        {
+          "expr": "rate(cache_gets_total{cache=\"circleIds\",result=\"hit\"}[1m]) / (rate(cache_gets_total{cache=\"circleIds\",result=\"hit\"}[1m]) + rate(cache_gets_total{cache=\"circleIds\",result=\"miss\"}[1m]))",
+          "legendFormat": "circleIds hit rate"
+        },
+        {
+          "expr": "rate(cache_gets_total{cache=\"userDetails\",result=\"hit\"}[1m]) / (rate(cache_gets_total{cache=\"userDetails\",result=\"hit\"}[1m]) + rate(cache_gets_total{cache=\"userDetails\",result=\"miss\"}[1m]))",
+          "legendFormat": "userDetails hit rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "max": 1 }
+      }
+    },
+    {
+      "title": "스레드풀 활용도",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "executor_active_threads{name=~\"fanoutExecutor|countExecutor|batchExecutor|notificationExecutor\"}",
+          "legendFormat": "{{name}} active"
+        },
+        {
+          "expr": "executor_pool_size_threads{name=~\"fanoutExecutor|countExecutor|batchExecutor|notificationExecutor\"}",
+          "legendFormat": "{{name}} pool"
+        },
+        {
+          "expr": "executor_queue_remaining_tasks{name=~\"fanoutExecutor|countExecutor|batchExecutor|notificationExecutor\"}",
+          "legendFormat": "{{name}} queue remaining"
+        }
+      ]
+    },
+    {
+      "title": "Fan-out Retry / Failure",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "rate(feed_fanout_retry_total[1m])",
+          "legendFormat": "retry/s"
+        },
+        {
+          "expr": "rate(feed_fanout_failure_total[1m])",
+          "legendFormat": "failure/s"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 39,
+  "tags": ["coredisc", "feed"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "CoreDisc - Feed Pipeline",
+  "uid": "coredisc-feed-pipeline",
+  "version": 1
+}
