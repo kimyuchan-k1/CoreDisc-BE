@@ -27,4 +27,7 @@ public interface CommentRepository {
     // 부모 댓글 ID 목록으로 대댓글 수 일괄 조회
     Map<Long, Long> countRepliesByParentIds(List<Long> parentIds);
 
+    List<Comment> findAllActiveByMemberIdAndPostMemberId(Long commenterId, Long postAuthorId);
+
+    int softDeleteAllByMemberIdAndPostMemberId(Long commenterId, Long postAuthorId);
 }

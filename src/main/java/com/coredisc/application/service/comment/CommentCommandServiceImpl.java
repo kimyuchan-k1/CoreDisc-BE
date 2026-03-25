@@ -1,6 +1,7 @@
 package com.coredisc.application.service.comment;
 
 import com.coredisc.application.event.NotificationEvent;
+import com.coredisc.application.event.PostCountEvent;
 import com.coredisc.common.apiPayload.status.ErrorStatus;
 import com.coredisc.common.converter.CommentConverter;
 import com.coredisc.common.exception.handler.CommentHandler;
@@ -12,6 +13,7 @@ import com.coredisc.domain.member.Member;
 import com.coredisc.domain.member.MemberRepository;
 import com.coredisc.domain.post.Post;
 import com.coredisc.domain.post.PostRepository;
+import com.coredisc.application.service.post.PostVisibilityChecker;
 import com.coredisc.presentation.dto.comment.CommentRequestDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -29,6 +31,7 @@ public class CommentCommandServiceImpl implements CommentCommandService {
     private final PostRepository postRepository;
     private final MemberRepository memberRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final PostVisibilityChecker postVisibilityChecker;
 
     public Comment createComment(Long postId, CommentRequestDTO request, Long memberId) {
         Post post = postRepository.findById(postId)
@@ -37,8 +40,13 @@ public class CommentCommandServiceImpl implements CommentCommandService {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new MemberHandler(ErrorStatus.MEMBER_NOT_FOUND));
 
+        postVisibilityChecker.validateAccess(post, member);
+
         Comment comment = CommentConverter.toComment(request.getContent(), post, member);
         Comment savedComment = commentRepository.save(comment);
+
+        // 댓글 카운트 원자적 증가 (트랜잭션 커밋 후 별도 실행 — FK Deadlock 방지)
+        eventPublisher.publishEvent(PostCountEvent.commentIncrement(postId));
 
         // 댓글 작성자와 게시글 작성자가 다른 경우에만 비동기 알림 발행
         if (!post.getMember().getId().equals(member.getId())) {
@@ -57,6 +65,8 @@ public class CommentCommandServiceImpl implements CommentCommandService {
 
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new MemberHandler(ErrorStatus.MEMBER_NOT_FOUND));
+
+        postVisibilityChecker.validateAccess(parentComment.getPost(), member);
 
         if (parentComment.getDepth() >= 1) {
             throw new CommentHandler(ErrorStatus.COMMENT_DEPTH_EXCEEDED);
@@ -85,7 +95,10 @@ public class CommentCommandServiceImpl implements CommentCommandService {
             throw new CommentHandler(ErrorStatus.COMMENT_ACCESS_DENIED);
         }
 
+        Long postId = comment.getPost().getId();
         commentRepository.delete(comment);
+        // 댓글 카운트 원자적 감소 (트랜잭션 커밋 후 별도 실행)
+        eventPublisher.publishEvent(PostCountEvent.commentDecrement(postId));
     }
 
 }

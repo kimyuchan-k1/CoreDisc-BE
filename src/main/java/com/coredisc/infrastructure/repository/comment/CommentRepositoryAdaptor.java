@@ -55,4 +55,13 @@ public class CommentRepositoryAdaptor implements CommentRepository {
         return commentQueryRepository.countRepliesByParentIds(parentIds);
     }
 
+    @Override
+    public List<Comment> findAllActiveByMemberIdAndPostMemberId(Long commenterId, Long postAuthorId) {
+        return jpaCommentRepository.findAllActiveByMemberIdAndPostMemberId(commenterId, postAuthorId);
+    }
+
+    @Override
+    public int softDeleteAllByMemberIdAndPostMemberId(Long commenterId, Long postAuthorId) {
+        return jpaCommentRepository.softDeleteAllByMemberIdAndPostMemberId(commenterId, postAuthorId);
+    }
 }

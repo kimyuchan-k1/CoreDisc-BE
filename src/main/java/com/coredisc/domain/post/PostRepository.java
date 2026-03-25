@@ -39,6 +39,12 @@ public interface PostRepository {
     // 게시글 동적 조회
     List<PostResponseDTO.PostFeedResponseDTO.PostSummary> findPostFeed(Member member, FeedType feedType, Long lastPostId, Integer size, List<Long> followingIds, List<Long> circleIds);
 
+    // 인박스 postId 목록으로 PostSummary 조회
+    List<PostResponseDTO.PostFeedResponseDTO.PostSummary> findPostSummariesByIds(List<Long> postIds);
+
+    // 특정 작성자의 최근 게시글 ID 조회
+    List<Long> findRecentPostIdsByMemberId(Long memberId, List<PublicityType> publicityTypes, int limit);
+
     // 디스크, 캘린더, 통계용
     List<CalendarPostDTO> findPostInfoByMemberAndMonth(int year, int month, Member member);
     List<Post> findPostsByCreatedDate(LocalDate targetDate);
@@ -54,4 +60,14 @@ public interface PostRepository {
     org.springframework.data.domain.Page<Post> findTempPostsPageable(PostStatus status, LocalDateTime createdAt, Pageable pageable);
 
     List<Long> findDistinctMemberIdsByStatusAndCreatedAtBetween(PostStatus postStatus, LocalDateTime startOfDay, LocalDateTime endOfDay);
+
+    // 원자적 카운트 연산 (동시성 안전)
+    void incrementLikeCount(Long postId);
+    void decrementLikeCount(Long postId);
+    void incrementCommentCount(Long postId);
+    void decrementCommentCount(Long postId);
+
+    // 벌크 카운트 보정 (Block 정리용)
+    void decrementLikeCountByAmount(Long postId, int amount);
+    void decrementCommentCountByAmount(Long postId, int amount);
 }

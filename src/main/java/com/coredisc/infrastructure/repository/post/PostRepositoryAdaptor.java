@@ -95,6 +95,16 @@ public class PostRepositoryAdaptor implements PostRepository {
         return queryPostRepository.findPostFeed(member.getId(), feedType, lastPostId, size, followingIds, circleIds);
     }
 
+    @Override
+    public List<PostResponseDTO.PostFeedResponseDTO.PostSummary> findPostSummariesByIds(List<Long> postIds) {
+        return queryPostRepository.findPostSummariesByIds(postIds);
+    }
+
+    @Override
+    public List<Long> findRecentPostIdsByMemberId(Long memberId, List<PublicityType> publicityTypes, int limit) {
+        return queryPostRepository.findRecentPostIdsByMemberId(memberId, publicityTypes, limit);
+    }
+
 
     @Override
     public List<CalendarPostDTO> findPostInfoByMemberAndMonth(int year, int month, Member member) {
@@ -142,5 +152,35 @@ public class PostRepositoryAdaptor implements PostRepository {
     @Override
     public List<Post> findAllByMemberAndCreatedAtBetweenOrderByCreatedAtAsc(Member member, LocalDateTime start, LocalDateTime end) {
         return jpaPostRepository.findAllByMemberAndCreatedAtBetweenOrderByCreatedAtAsc(member, start, end);
+    }
+
+    @Override
+    public void incrementLikeCount(Long postId) {
+        jpaPostRepository.incrementLikeCount(postId);
+    }
+
+    @Override
+    public void decrementLikeCount(Long postId) {
+        jpaPostRepository.decrementLikeCount(postId);
+    }
+
+    @Override
+    public void incrementCommentCount(Long postId) {
+        jpaPostRepository.incrementCommentCount(postId);
+    }
+
+    @Override
+    public void decrementCommentCount(Long postId) {
+        jpaPostRepository.decrementCommentCount(postId);
+    }
+
+    @Override
+    public void decrementLikeCountByAmount(Long postId, int amount) {
+        jpaPostRepository.decrementLikeCountByAmount(postId, amount);
+    }
+
+    @Override
+    public void decrementCommentCountByAmount(Long postId, int amount) {
+        jpaPostRepository.decrementCommentCountByAmount(postId, amount);
     }
 }

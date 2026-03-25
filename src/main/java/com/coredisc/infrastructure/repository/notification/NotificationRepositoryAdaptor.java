@@ -15,4 +15,9 @@ public class NotificationRepositoryAdaptor implements NotificationRepository {
     public Notification save(Notification notification) {
         return jpaNotificationRepository.save(notification);
     }
+
+    @Override
+    public void deleteAllBySenderIdAndReceiverId(Long senderId, Long receiverId) {
+        jpaNotificationRepository.deleteAllBySenderIdAndReceiverId(senderId, receiverId);
+    }
 }

@@ -3,8 +3,10 @@ package com.coredisc.presentation.dto.post;
 import com.coredisc.domain.common.enums.*;
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -109,6 +111,8 @@ public class PostResponseDTO {
 
     @Getter
     @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class PostFeedResponseDTO {
         private List<PostSummary> posts;
         private Long nextCursor;
@@ -116,6 +120,8 @@ public class PostResponseDTO {
 
         @Getter
         @Builder
+        @NoArgsConstructor
+        @AllArgsConstructor
         public static class PostSummary {
             private Long postId;
             private MemberInfo member;
@@ -125,6 +131,8 @@ public class PostResponseDTO {
 
             @Getter
             @Builder
+            @NoArgsConstructor
+            @AllArgsConstructor
             public static class MemberInfo {
                 private Long memberId;
                 private String username;
@@ -133,6 +141,8 @@ public class PostResponseDTO {
 
             @Getter
             @Builder
+            @NoArgsConstructor
+            @AllArgsConstructor
             public static class Answer {
                 private Long answerId;
                 private String questionContent;
@@ -142,12 +152,16 @@ public class PostResponseDTO {
 
                 @Getter
                 @Builder
+                @NoArgsConstructor
+                @AllArgsConstructor
                 public static class ImageAnswer {
                     private String thumbnailUrl;
                 }
 
                 @Getter
                 @Builder
+                @NoArgsConstructor
+                @AllArgsConstructor
                 public static class TextAnswer {
                     private String content;
                 }

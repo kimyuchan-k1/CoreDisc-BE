@@ -1,6 +1,6 @@
 package com.coredisc.application.service.post;
 
-import com.coredisc.application.service.follow.FollowQueryService;
+import com.coredisc.application.service.feed.FeedReadService;
 import com.coredisc.common.apiPayload.status.ErrorStatus;
 import com.coredisc.common.converter.PostConverter;
 import com.coredisc.common.exception.handler.PostHandler;
@@ -31,7 +31,8 @@ public class PostQueryServiceImpl implements PostQueryService {
     private final PostRepository postRepository;
     private final PostLikeRepository postLikeRepository;
     private final TodayQuestionRepository todayQuestionRepository;
-    private final FollowQueryService followQueryService;
+    private final FeedReadService feedReadService;
+    private final PostVisibilityChecker postVisibilityChecker;
 
     @Override
     public List<Post> getTempPosts(Member member) {
@@ -72,32 +73,7 @@ public class PostQueryServiceImpl implements PostQueryService {
 
     @Override
     public PostResponseDTO.PostFeedResponseDTO findPostFeed(Member member, PostRequestDTO.PostFeedRequestDto request) {
-        // 캐시된 팔로잉/서클 ID 목록 조회 (Caffeine 캐시 히트 시 DB 쿼리 없음)
-        List<Long> followingIds = followQueryService.getFollowingIds(member.getId());
-        List<Long> circleIds = followQueryService.getCircleFollowingIds(member.getId());
-
-        List<PostResponseDTO.PostFeedResponseDTO.PostSummary> posts = postRepository.findPostFeed(
-                member,
-                request.getFeedType(),
-                request.getLastPostId(),
-                request.getSize(),
-                followingIds,
-                circleIds
-        );
-
-        // hasNext 체크
-        boolean hasNext = posts.size() > request.getSize();
-        if (hasNext) {
-            posts = posts.subList(0, request.getSize());
-        }
-
-        // nextCursor 설정
-        Long nextCursor = null;
-        if (hasNext && !posts.isEmpty()) {
-            nextCursor = posts.get(posts.size() - 1).getPostId();
-        }
-
-        return PostConverter.toPostFeedResponseDto(posts, nextCursor,hasNext);
+        return feedReadService.findPostFeed(member, request);
     }
 
     @Override
@@ -106,6 +82,9 @@ public class PostQueryServiceImpl implements PostQueryService {
         Post findPost = postRepository.findById(postId).orElseThrow(
                 () -> new PostHandler(ErrorStatus.POST_NOT_FOUND)
         );
+
+        // 가시성 검증: Block, Publicity 기반 접근 제어
+        postVisibilityChecker.validateAccess(findPost, member);
 
         Post post = postRepository.findPostDetail(findPost.getMember(),postId);
 

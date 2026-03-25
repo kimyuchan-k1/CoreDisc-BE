@@ -28,6 +28,12 @@ public interface QueryPostRepository {
 
     List<PostResponseDTO.PostFeedResponseDTO.PostSummary> findPostFeed(Long memberId, FeedType feedType, Long lastPostId, Integer size, List<Long> followingIds, List<Long> circleIds);
 
+    // 인박스에서 가져온 postId 목록으로 PostSummary DTO 변환
+    List<PostResponseDTO.PostFeedResponseDTO.PostSummary> findPostSummariesByIds(List<Long> postIds);
+
+    // 특정 작성자의 최근 게시글 ID 조회 (backfill/cleanup용)
+    List<Long> findRecentPostIdsByMemberId(Long memberId, List<PublicityType> publicityTypes, int limit);
+
     Post findPostDetail(Long memberId, Long postId);
 
     List<CalendarPostDTO> findPostInfoByMemberAndMonth(int year, int month, Member member);

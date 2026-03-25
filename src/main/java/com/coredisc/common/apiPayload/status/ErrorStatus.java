@@ -141,6 +141,7 @@ public enum ErrorStatus implements BaseErrorCode {
 
     //좋아요 관련 예외
     POST_LIKE_DUPLICATED(HttpStatus.CONFLICT, "LIKE4001","좋아요 요청의 중복이 발생했습니다."),
+    POST_LIKE_NOT_FOUND(HttpStatus.NOT_FOUND, "LIKE4002", "좋아요가 존재하지 않습니다."),
 
     // For test
     TEMP_EXCEPTION(HttpStatus.BAD_REQUEST, "TEMP4001", "테스트 용도"),

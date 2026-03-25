@@ -7,6 +7,8 @@ import com.coredisc.domain.post.PostLikeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
+
 @Repository
 @RequiredArgsConstructor
 public class PostLikeRepositoryAdaptor implements PostLikeRepository {
@@ -32,5 +34,15 @@ public class PostLikeRepositoryAdaptor implements PostLikeRepository {
     @Override
     public void deleteByPostAndMember(Post post , Member member) {
         jpaPostLikeRepository.deleteByPostAndMember(post,member);
+    }
+
+    @Override
+    public List<PostLike> findAllByMemberIdAndPostMemberId(Long likerId, Long postAuthorId) {
+        return jpaPostLikeRepository.findAllByMemberIdAndPostMemberId(likerId, postAuthorId);
+    }
+
+    @Override
+    public void deleteAllByMemberIdAndPostMemberId(Long likerId, Long postAuthorId) {
+        jpaPostLikeRepository.deleteAllByMemberIdAndPostMemberId(likerId, postAuthorId);
     }
 }

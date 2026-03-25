@@ -18,4 +18,9 @@ public interface QueryFollowRepository {
 
     List<Long> findFollowingIds(Long memberId);
     List<Long> findCircleFollowingIds(Long memberId);
+
+    // Fan-out용: 나를 팔로우하는 사람들의 ID (역방향)
+    List<Long> findFollowerIds(Long memberId);
+    // Fan-out용: 나를 서클로 지정한 팔로워들의 ID (역방향)
+    List<Long> findCircleFollowerIds(Long memberId);
 }

@@ -116,9 +116,6 @@ public class Post extends BaseEntity {
         if (!this.member.getId().equals(member.getId())) {
             throw new PostHandler(ErrorStatus.NOT_POST_OWNER);
         }
-
     }
-
-
 
 }

@@ -124,4 +124,25 @@ public class QueryFollowRepositoryImpl implements QueryFollowRepository {
                         .and(follow.isCircle.eq(true)))
                 .fetch();
     }
+
+    @Override
+    public List<Long> findFollowerIds(Long memberId) {
+        QFollow follow = QFollow.follow;
+        return queryFactory
+                .select(follow.follower.id)
+                .from(follow)
+                .where(follow.following.id.eq(memberId))
+                .fetch();
+    }
+
+    @Override
+    public List<Long> findCircleFollowerIds(Long memberId) {
+        QFollow follow = QFollow.follow;
+        return queryFactory
+                .select(follow.follower.id)
+                .from(follow)
+                .where(follow.following.id.eq(memberId)
+                        .and(follow.isCircle.eq(true)))
+                .fetch();
+    }
 }

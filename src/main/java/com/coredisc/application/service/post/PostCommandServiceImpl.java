@@ -16,8 +16,12 @@ import com.coredisc.infrastructure.aws.s3.ImageStorageService;
 import com.coredisc.infrastructure.aws.s3.ImageUploadResult;
 import com.coredisc.presentation.dto.post.PostRequestDTO;
 import com.coredisc.presentation.dto.post.PostResponseDTO;
+import com.coredisc.application.event.PostDeletedEvent;
+import com.coredisc.application.event.PostPublishedEvent;
+import com.coredisc.application.service.feed.FeedCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -37,6 +41,8 @@ public class PostCommandServiceImpl implements PostCommandService {
     private final PostAnswerImageRepository postAnswerImageRepository;
     private final TodayQuestionRepository todayQuestionRepository;
     private final ImageStorageService amazonS3Manager;
+    private final FeedCacheService feedCacheService;
+    private final ApplicationEventPublisher eventPublisher;
 
     //  빈 게시글 생성
     @Override
@@ -200,6 +206,13 @@ public class PostCommandServiceImpl implements PostCommandService {
 
         Post savedPost = postRepository.save(post);
 
+        // 본인 피드 캐시 즉시 무효화 (팔로워 캐시는 TTL 30초 후 자동 만료)
+        feedCacheService.evict(member.getId());
+
+        // Fan-out: 팔로워 인박스에 push (트랜잭션 커밋 후 비동기 실행)
+        eventPublisher.publishEvent(
+                PostPublishedEvent.of(savedPost.getId(), member.getId(), request.getPublicity()));
+
         log.info("게시글 발행 완료 - 게시글 ID: {}, 회원 ID: {}",postId, member.getId());
         return savedPost;
 
@@ -228,8 +241,16 @@ public class PostCommandServiceImpl implements PostCommandService {
 
         //TODO : 삭제 전 정리 작업 -> 통계 업데이트, 로그 기록,,..
 
+        // 삭제 전 publicity 저장 (이벤트 발행에 필요)
+        var publicity = post.getPublicity();
+
         // DB에서 게시글 삭제 (Cascade로 연관 엔티티들 자동 삭제)
         postRepository.delete(post);
+
+        // Fan-out 인박스 정리 (트랜잭션 커밋 후 비동기 실행)
+        if (post.isPublished()) {
+            eventPublisher.publishEvent(PostDeletedEvent.of(postId, member.getId(), publicity));
+        }
 
         log.info("게시글 완전 삭제 완료 - 게시글ID: {}, 회원ID: {}, 삭제된 이미지 수: {}",
                 postId, member.getId(), imageUrls.size());
