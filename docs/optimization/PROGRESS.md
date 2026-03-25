@@ -7,9 +7,32 @@
 
 ## 현재 상태
 
-- **현재 Phase**: Phase 8 — Redis 장애 복원력 + 핫 키 최적화 ✅ **완료**
-- **이전 작업**: Phase 7 — Push/Pull 하이브리드 피드 아키텍처 완료
-- **마지막 업데이트**: 2026-03-21
+- **현재 Phase**: Phase 9 — 알림 파이프라인 장애 복원력 ✅ **완료**
+- **이전 작업**: Phase 8 — Redis 장애 복원력 + 핫 키 최적화 완료
+- **마지막 업데이트**: 2026-03-22
+
+### Phase 9: 알림 파이프라인 장애 복원력 — ✅ 완료
+- [x] 9-1a. FcmServiceStub 지연 시뮬레이션 활성화 (stub.delay-ms: 200)
+- [x] 9-1b. k6 알림 스트레스 테스트 작성 (`k6/notification-stress-test.js`)
+- [x] 9-2a. CallerRunsPolicy + 큐 용량 증가 (100 → 500)
+- [x] 9-2b. FcmCircuitBreaker 생성 (FAILURE_THRESHOLD=5, OPEN_DURATION=30초)
+- [x] 9-2c. 이중 토큰 검증 제거 + CB 적용 (기기당 FCM 2회 → 1회)
+- [x] 9-2d. 이벤트 리스너 재시도 (1회 retry, 100ms backoff)
+- [x] 9-2e. Micrometer 메트릭 추가 (6종: duration, success, failure, retry, skip, circuit.state)
+- [x] 9-2f. 스케줄러 비동기화 (notificationExecutor 위임)
+- [x] 9-3. 외부 큐 ADR — Redis Streams 도입하지 않음 (`docs/optimization/23-notification-queue-adr.md`)
+- [x] 9-4. SKIP (외부 큐 미채택)
+- [x] 9-5. **Story 1 — 코드 최적화** (동일 인프라 e2-standard-2, 단일 VM)
+  - [x] Before: p95=3.83s, 48 req/s → After: p95=3.06s, 58 req/s
+  - [x] **레이턴시 20% 개선, 처리량 19% 향상, HTTP 500 = 0**
+  - [x] Prometheus 메트릭 7종 정상 등록
+- [x] 9-6. **Story 2 — 인프라 분리** (동일 코드, 인프라만 변경)
+  - [x] 변경: e2-standard-2→4 (4vCPU) + Redis 전용 VM 분리
+  - [x] 알림 스트레스: p95 3.06s → **421ms (↓86%)**, 처리량 58 → **274 req/s (↑375%)**
+  - [x] 통합 부하: p95 2.96s → **226ms (↓92%)**, 처리량 71 → **174 req/s (↑144%)**
+  - [x] **병목 = 인프라 (코드 아님)를 측정으로 증명**
+- [x] 9-7. 수용 능력 분석: **쾌적 DAU 10K~15K / MAU 50K~75K**
+- [x] 9-8. 문서 업데이트 (`docs/optimization/22-phase9-notification-resilience.md`)
 
 ### Phase 8: Redis 장애 복원력 + 핫 키 최적화 — ✅ 완료
 - [x] 8-1. Redis Timeout + Circuit Breaker 장애 복원력 (RedisCircuitBreaker, 300ms timeout)
