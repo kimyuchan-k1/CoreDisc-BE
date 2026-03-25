@@ -1,0 +1,13 @@
+# GCP 프로젝트 ID (필수)
+project_id = "your-gcp-project-id"
+
+# 리전/존 (서울 기본값)
+# region = "asia-northeast3"
+# zone   = "asia-northeast3-a"
+
+# 머신 타입 (기본값 충분)
+# app_machine_type        = "e2-standard-2"  # 2 vCPU, 8GB - ~$0.067/hr
+# monitoring_machine_type = "e2-medium"      # 2 vCPU, 4GB - ~$0.034/hr
+
+# MySQL 비밀번호
+db_password = "coredisc2024"
