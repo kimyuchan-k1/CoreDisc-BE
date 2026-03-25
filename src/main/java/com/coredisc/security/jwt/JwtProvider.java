@@ -158,7 +158,7 @@ public class JwtProvider {
 
             String username = getUsername(refreshToken);
 
-            // redis 확인
+            // redis 확인 (Redis 장애 시 exists()가 false 반환 → refresh 재발급 불가)
             if(!redisUtil.exists(username)) {
                 throw new AuthHandler(ErrorStatus.INVALID_TOKEN);
             }

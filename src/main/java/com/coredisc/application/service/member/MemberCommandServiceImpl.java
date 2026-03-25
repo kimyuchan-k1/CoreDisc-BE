@@ -14,6 +14,7 @@ import com.coredisc.domain.profileImg.ProfileImgRepository;
 import com.coredisc.infrastructure.aws.s3.ImageStorageService;
 import com.coredisc.presentation.dto.member.MemberRequestDTO;
 import com.coredisc.presentation.dto.profileImg.ProfileImgResponseDTO;
+import com.coredisc.security.auth.PrincipalDetailsService;
 import com.coredisc.security.jwt.JwtProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -36,6 +37,7 @@ public class MemberCommandServiceImpl implements MemberCommandService {
     private final JwtProvider jwtProvider;
     private final DeviceCommandService deviceCommandService;
     private final ImageStorageService amazonS3Manager;
+    private final PrincipalDetailsService principalDetailsService;
 
     @Override
     public void resetPassword(MemberRequestDTO.ResetPasswordDTO request) {
@@ -78,6 +80,7 @@ public class MemberCommandServiceImpl implements MemberCommandService {
 
         // username 변경시 기존 accessToken 블랙리스트 저장
         if (isUsernameChanged) {
+            principalDetailsService.evictUserCache(member.getUsername());
             logoutMember(accessToken, deviceToken, request.getNewUsername());
         }
 
@@ -133,9 +136,11 @@ public class MemberCommandServiceImpl implements MemberCommandService {
             throw new AuthHandler(ErrorStatus.USERNAME_ALREADY_EXISTS);
         }
 
+        String oldUsername = member.getUsername();
         member.setUsername(request.getNewUsername());
         memberRepository.save(member);
 
+        principalDetailsService.evictUserCache(oldUsername);
         logoutMember(accessToken, deviceToken, request.getNewUsername());
     }
 

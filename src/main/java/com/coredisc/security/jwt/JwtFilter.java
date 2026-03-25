@@ -39,7 +39,7 @@ public class JwtFilter extends OncePerRequestFilter {
 
             // JWT 유효성 검증
             if(accessToken != null && jwtProvider.validateAccessToken(accessToken)) {
-                // 로그아웃된 토큰 차단
+                // 로그아웃된 토큰 차단 (Redis 장애 시 get()이 null 반환 → 블랙리스트 아님으로 처리)
                 String blackListValue = (String)redisUtil.get(accessToken);
                 if(blackListValue != null && blackListValue.equals("logout")) {
                     throw new AuthHandler(ErrorStatus.TOKEN_LOGGED_OUT);
