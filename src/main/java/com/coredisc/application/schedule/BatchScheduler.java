@@ -59,11 +59,24 @@ public class BatchScheduler {
         discBatchService.generateDiscsForMonth(targetMonth);
     }
 
-    // ✅ 테스트용: 특정 일자 기준 데일리 통계 실행
+    // 테스트용: 특정 일자 기준 데일리 통계 실행
     public void runBatchForDay(LocalDate targetDay) {
-        log.info("🧪 [테스트] {}일자 통계 배치 실행 시작", targetDay);
+        log.info("[테스트] {}일자 통계 배치 실행 시작", targetDay);
         runDailyBatch(targetDay);
-        log.info("🧪 [테스트] {}일자 통계 배치 실행 완료", targetDay);
+        log.info("[테스트] {}일자 통계 배치 실행 완료", targetDay);
+    }
+
+    // 테스트용: 순차 실행 (병렬 실행과 비교 측정용)
+    public void runBatchForDaySequential(LocalDate targetDate) {
+        long startTime = System.currentTimeMillis();
+
+        reportStatBatchService.generateDailyStatistics(targetDate);
+        reportStatBatchService.generateMonthlyFixedQuestionStats(targetDate);
+        reportStatBatchService.generateRandomQuestionsStats(targetDate);
+        reportStatBatchService.generateMonthlySelectionDiaryStats(targetDate);
+
+        long elapsed = System.currentTimeMillis() - startTime;
+        log.info("[배치] {}일자 통계 배치 작업 완료 - 순차 실행 소요시간: {}ms", targetDate, elapsed);
     }
 
     private void runDailyBatch(LocalDate targetDate) {
