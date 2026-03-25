@@ -13,6 +13,7 @@ import com.coredisc.domain.todayQuestion.TodayQuestionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +22,6 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -34,13 +34,19 @@ public class NotificationReminderScheduler {
     private final PostAnswerRepository postAnswerRepository;
     private final DeviceRepository deviceRepository;
     private final FcmService fcmService;
+    private final ThreadPoolTaskExecutor notificationExecutor;
 
     @Scheduled(cron = "0 */5 * * * *", zone = "Asia/Seoul")
     public void reminderNotification() {
-        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
-
         int hh = LocalTime.now(ZoneId.of("Asia/Seoul")).getHour();
         int mm = LocalTime.now(ZoneId.of("Asia/Seoul")).getMinute();
+        executeReminder(hh, mm);
+    }
+
+    // 테스트용: 특정 시간 기준 리마인더 실행
+    public void executeReminder(int hh, int mm) {
+        long startTime = System.currentTimeMillis();
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
 
         /*
         데일리 리마인더 알림 생성 (사용자가 설정한 시간에 생성되도록 시간, 분 매칭)
@@ -114,6 +120,9 @@ public class NotificationReminderScheduler {
         // 미응답 리마인더 처리
         unansweredTargets.forEach(setting -> processUnansweredReminder(
                 setting.getMember(), memberQuestionOrders, memberAnswerOrders));
+
+        long elapsed = System.currentTimeMillis() - startTime;
+        log.info("[리마인더] 스케줄러 실행 완료 - 대상: {}명, 소요시간: {}ms", allMemberIds.size(), elapsed);
     }
 
     private void processDailyReminder(Member member,
@@ -174,7 +183,7 @@ public class NotificationReminderScheduler {
         return orders.contains(1) && orders.contains(2) && orders.contains(3) && orders.contains(4);
     }
 
-    // FCM 전송 공통 메서드
+    // FCM 전송: notificationExecutor에 위임 (스케줄러 스레드 블로킹 방지)
     private void sendFcmToDevices(List<Device> devices, Member member,
                                   String title, String body, NotificationType type) {
         Map<String, String> data = new HashMap<>();
@@ -182,11 +191,18 @@ public class NotificationReminderScheduler {
 
         for (Device device : devices) {
             String token = device.getToken();
-            if (fcmService.isTokenValid(token)) {
-                fcmService.sendNotificationToToken(token, title, body, data);
-            } else {
-                log.warn("유효하지 않은 토큰 발견: memberId={}, token={}", member.getId(), token);
+            if (!fcmService.isTokenValid(token)) {
+                log.warn("유효하지 않은 토큰 발견: memberId={}", member.getId());
+                continue;
             }
+
+            notificationExecutor.execute(() -> {
+                try {
+                    fcmService.sendNotificationToToken(token, title, body, data);
+                } catch (Exception e) {
+                    log.warn("[리마인더] FCM 전송 실패: memberId={}, error={}", member.getId(), e.getMessage());
+                }
+            });
         }
     }
 }
